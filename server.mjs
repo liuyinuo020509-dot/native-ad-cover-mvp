@@ -53,9 +53,14 @@ async function loadDotEnv(filePath) {
   }
 }
 
-function requireApiKey() {
-  if (env.OPENAI_API_KEY) return;
-  throw new Error("缺少 OPENAI_API_KEY。请确认文件名是 .env，或当前文件 API set.env 里第一行写成 OPENAI_API_KEY=你的key。改完后要重新启动 start.ps1。");
+function resolveApiKey(input = {}) {
+  return String(input.apiKey || env.OPENAI_API_KEY || "").trim();
+}
+
+function requireApiKey(input = {}) {
+  const apiKey = resolveApiKey(input);
+  if (apiKey) return apiKey;
+  throw new Error("缺少 OpenAI API Key。请在页面顶部填写你自己的 API Key，或在服务器环境变量里配置 OPENAI_API_KEY。");
 }
 
 function sendJson(res, status, body) {
@@ -153,8 +158,8 @@ function parseJsonLoose(text) {
   }
 }
 
-async function callResponses({ instructions, input }) {
-  requireApiKey();
+async function callResponses({ instructions, input, apiKey }) {
+  const resolvedApiKey = requireApiKey({ apiKey });
 
   let rsp;
   try {
@@ -162,7 +167,7 @@ async function callResponses({ instructions, input }) {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        authorization: `Bearer ${resolvedApiKey}`,
       },
       body: JSON.stringify({
         model: textModel,
@@ -181,8 +186,8 @@ async function callResponses({ instructions, input }) {
   return parseJsonLoose(extractOutputText(data));
 }
 
-async function callResponsesWithImage({ instructions, text, imageDataUrl }) {
-  requireApiKey();
+async function callResponsesWithImage({ instructions, text, imageDataUrl, apiKey }) {
+  const resolvedApiKey = requireApiKey({ apiKey });
 
   let rsp;
   try {
@@ -190,7 +195,7 @@ async function callResponsesWithImage({ instructions, text, imageDataUrl }) {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        authorization: `Bearer ${resolvedApiKey}`,
       },
       body: JSON.stringify({
         model: textModel,
@@ -217,8 +222,8 @@ async function callResponsesWithImage({ instructions, text, imageDataUrl }) {
   return parseJsonLoose(extractOutputText(data));
 }
 
-async function generateImage(prompt) {
-  requireApiKey();
+async function generateImage(prompt, apiKey) {
+  const resolvedApiKey = requireApiKey({ apiKey });
 
   const body = {
     model: imageModel,
@@ -232,7 +237,7 @@ async function generateImage(prompt) {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        authorization: `Bearer ${resolvedApiKey}`,
       },
       body: JSON.stringify(body),
     });
@@ -433,17 +438,25 @@ async function handleGenerate(req, res) {
   if (!input.appName || !input.adCopy) {
     return sendJson(res, 400, { error: "appName 和 adCopy 必填" });
   }
+  const apiKey = resolveApiKey(input);
+  if (!apiKey) {
+    return sendJson(res, 400, { error: "请先在页面顶部填写你自己的 OpenAI API Key。" });
+  }
 
   const count = Math.max(1, Math.min(Number(input.count || 1), 4));
+  const safeInput = { ...input };
+  delete safeInput.apiKey;
   const memory = await loadMemoryBundle();
   const strategy = await callResponses({
     instructions: strategySystemPrompt,
     input: buildStrategyInput(input),
+    apiKey,
   });
 
   const generation = await callResponses({
     instructions: generationSystemPrompt,
     input: buildGenerationInput(input, strategy, memory),
+    apiKey,
   });
 
   const variants = generation.generationVariants?.length
@@ -454,11 +467,12 @@ async function handleGenerate(req, res) {
   for (let i = 0; i < count; i += 1) {
     const variant = variants[i % variants.length];
     const prompt = buildFinalImagePrompt(input, strategy, generation, variant);
-    const image = await generateImage(prompt);
+    const image = await generateImage(prompt, apiKey);
     const quality = await callResponsesWithImage({
       instructions: qualitySystemPrompt,
       text: buildQualityInput(input, strategy, generation, memory),
       imageDataUrl: image.imageDataUrl,
+      apiKey,
     });
     const asset = {
       assetId: `asset_${i + 1}`,
@@ -474,7 +488,7 @@ async function handleGenerate(req, res) {
   assets.sort((a, b) => (b.quality?.totalScore || 0) - (a.quality?.totalScore || 0));
   sendJson(res, 200, {
     status: "completed",
-    input,
+    input: safeInput,
     strictImageRules,
     memoryUsed: memory,
     strategy,
@@ -487,6 +501,7 @@ async function handleGenerate(req, res) {
 async function handleFeedback(req, res) {
   const raw = await collectBody(req);
   const body = JSON.parse(raw || "{}");
+  const apiKey = resolveApiKey(body);
   const action = normalizeAction(body.action);
   if (!action) {
     return sendJson(res, 400, { error: "action 必须是 selected/rejected/edited/shortlisted 之一" });
@@ -528,7 +543,7 @@ async function handleFeedback(req, res) {
 
   let attribution = null;
   let attributionSkipped = false;
-  if (env.OPENAI_API_KEY) {
+  if (apiKey) {
     attribution = await callResponses({
       instructions: preferenceAttributionSystemPrompt,
       input: JSON.stringify({
@@ -536,6 +551,7 @@ async function handleFeedback(req, res) {
         currentHumanPreferenceMemory: currentMemory,
         strictImageRules,
       }, null, 2),
+      apiKey,
     });
     await writeJsonFile(humanPreferenceMemoryPath, mergePreferenceMemory(currentMemory, attribution, record));
   } else {
@@ -563,6 +579,7 @@ async function handleFeedback(req, res) {
 async function handlePlatformResult(req, res) {
   const raw = await collectBody(req);
   const body = JSON.parse(raw || "{}");
+  const apiKey = resolveApiKey(body);
   const now = new Date().toISOString();
   const memory = await readJsonFile(platformResultMemoryPath, {
     version: 1,
@@ -590,7 +607,7 @@ async function handlePlatformResult(req, res) {
 
   let attribution = null;
   let attributionSkipped = false;
-  if (env.OPENAI_API_KEY) {
+  if (apiKey) {
     attribution = await callResponses({
       instructions: platformResultAttributionSystemPrompt,
       input: JSON.stringify({
@@ -598,6 +615,7 @@ async function handlePlatformResult(req, res) {
         currentPlatformResultMemory: memory,
         strictImageRules,
       }, null, 2),
+      apiKey,
     });
   } else {
     attributionSkipped = true;
@@ -623,7 +641,8 @@ async function handleMemory(req, res) {
 
 function handleConfig(req, res) {
   sendJson(res, 200, {
-    hasApiKey: !!env.OPENAI_API_KEY,
+    hasServerApiKey: !!env.OPENAI_API_KEY,
+    acceptsUserApiKey: true,
     textModel,
     imageModel,
     imageSize,
@@ -635,7 +654,8 @@ function handleHealth(req, res) {
   sendJson(res, 200, {
     status: "ok",
     service: "native-ad-cover-mvp",
-    hasApiKey: !!env.OPENAI_API_KEY,
+    hasServerApiKey: !!env.OPENAI_API_KEY,
+    acceptsUserApiKey: true,
     time: new Date().toISOString(),
   });
 }

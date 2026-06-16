@@ -22,13 +22,17 @@
 
 1. 安装 Node.js 20 或更高版本。
 
-2. 复制环境变量文件：
+2. 可选：复制环境变量文件。
+
+如果你希望每个用户在网页里填写自己的 API Key，可以跳过这一步。
+
+如果你希望服务器统一使用一个备用 Key，再复制：
 
 ```powershell
 copy .env.example .env
 ```
 
-3. 打开 `.env`，填写你自己的 OpenAI API Key：
+3. 可选：打开 `.env`，填写服务器备用 OpenAI API Key：
 
 ```text
 OPENAI_API_KEY=你的_api_key
@@ -110,14 +114,13 @@ POST /api/platform-result
 Build Command: npm install
 Start Command: npm start
 Environment:
-  OPENAI_API_KEY=你的_api_key
   TEXT_MODEL=gpt-5
   IMAGE_MODEL=gpt-image-2
   IMAGE_SIZE=auto
   PORT=10000
 ```
 
-部署后访问平台给你的网址即可。
+部署后访问平台给你的网址即可。默认情况下，每个用户在页面顶部填写自己的 OpenAI API Key；这个 Key 只保存在用户自己的浏览器里，不会上传到 GitHub。
 
 ## 给别人使用
 
@@ -125,8 +128,8 @@ Environment:
 
 1. 安装 Node.js
 2. 复制 `.env.example` 为 `.env`
-3. 填自己的 `OPENAI_API_KEY`
-4. 运行 `npm start`
-5. 打开本地地址
+3. 运行 `npm start`
+4. 打开本地地址
+5. 在页面顶部填自己的 OpenAI API Key
 
 不要把你的 `.env` 发给别人。

@@ -44,7 +44,7 @@ memory/*.json
 2. 打开 Render，选择 `New Blueprint`。
 3. 连接这个 GitHub 仓库。
 4. Render 会读取 `render.yaml`。
-5. 在环境变量里填入 `OPENAI_API_KEY`。
+5. 直接部署。默认由每个用户在网页里填写自己的 OpenAI API Key。
 
 方式二：手动建 `Web Service`
 
@@ -60,13 +60,14 @@ Start Command: npm start
 4. 添加环境变量：
 
 ```text
-OPENAI_API_KEY=你的_api_key
 TEXT_MODEL=gpt-5
 IMAGE_MODEL=gpt-image-2
 IMAGE_SIZE=auto
 ```
 
 5. 部署完成后打开 Render 提供的网址。
+
+如果你想让服务器统一承担费用，可以额外添加 `OPENAI_API_KEY`。如果你想让每个人使用自己的 Key，不要添加 `OPENAI_API_KEY`。
 
 ## 本地测试
 

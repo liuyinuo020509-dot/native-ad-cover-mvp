@@ -7,8 +7,6 @@ services:
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
-      - key: OPENAI_API_KEY
-        sync: false
       - key: TEXT_MODEL
         value: gpt-5
       - key: IMAGE_MODEL

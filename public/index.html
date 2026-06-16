@@ -46,6 +46,27 @@
       background: #fff0f0;
       color: var(--red);
     }
+    .keybar {
+      display: grid;
+      grid-template-columns: minmax(260px, 520px) auto;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+      max-width: 720px;
+    }
+    .keybar input {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font: inherit;
+    }
+    .keybar button {
+      width: auto;
+      margin-top: 0;
+      padding: 9px 12px;
+      background: #17202a;
+    }
     h1 { margin: 0 0 8px; font-size: 24px; }
     p { margin: 0; color: var(--muted); }
     main {
@@ -233,8 +254,12 @@
 <body>
   <header>
     <h1>原生广告封面生成 MVP</h1>
-    <p>输入应用名称和广告文案，按三个 Agent 自动生成封面、评分和返工建议。</p>
-    <div id="apiStatus" class="status">正在检查 API 配置...</div>
+    <p>输入自己的 OpenAI API Key，再填写应用名称和广告文案生成封面。</p>
+    <div class="keybar">
+      <input id="apiKeyInput" type="password" autocomplete="off" placeholder="输入你的 OpenAI API Key，仅保存在本机浏览器" />
+      <button id="saveApiKey" type="button">保存 Key</button>
+    </div>
+    <div id="apiStatus" class="status">正在检查 API 模式...</div>
   </header>
 
   <main>
@@ -297,6 +322,8 @@
     const taskList = document.getElementById("taskList");
     const batchGenerate = document.getElementById("batchGenerate");
     const apiStatus = document.getElementById("apiStatus");
+    const apiKeyInput = document.getElementById("apiKeyInput");
+    const saveApiKey = document.getElementById("saveApiKey");
     let lastResult = null;
     let importedTasks = [];
 
@@ -412,6 +439,14 @@
       `;
     }
 
+    function getApiKey() {
+      return apiKeyInput.value.trim();
+    }
+
+    function attachApiKey(payload) {
+      return { ...payload, apiKey: getApiKey() };
+    }
+
     async function recordFeedback(index, action) {
       if (!lastResult) return;
       const asset = lastResult.assets?.[index];
@@ -432,6 +467,7 @@
             input: lastResult.input,
             asset,
             strictImageRules: lastResult.strictImageRules,
+            apiKey: getApiKey(),
           }),
         });
         const data = await rsp.json();
@@ -484,10 +520,13 @@
       try {
         const rsp = await fetch("/api/config");
         const data = await rsp.json();
-        apiStatus.className = `status ${data.hasApiKey ? "ok" : "bad"}`;
-        apiStatus.textContent = data.hasApiKey
-          ? `API 已配置：${data.textModel} / ${data.imageModel}`
-          : "API 未配置：请检查 .env";
+        const hasUserKey = !!getApiKey();
+        apiStatus.className = `status ${hasUserKey || data.hasServerApiKey ? "ok" : "bad"}`;
+        apiStatus.textContent = hasUserKey
+          ? `已填写用户 Key：${data.textModel} / ${data.imageModel}`
+          : data.hasServerApiKey
+            ? `服务器已配置备用 Key：${data.textModel} / ${data.imageModel}`
+            : "请先填写你自己的 OpenAI API Key";
       } catch {
         apiStatus.className = "status bad";
         apiStatus.textContent = "API 状态读取失败：请重启服务";
@@ -498,7 +537,7 @@
       const rsp = await fetch("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(attachApiKey(payload)),
       });
       const data = await rsp.json();
       if (!rsp.ok) throw new Error(data.error || "生成失败");
@@ -512,6 +551,15 @@
       renderTasks();
       if (importedTasks[0]) loadTask(importedTasks[0]);
     });
+
+    saveApiKey.addEventListener("click", () => {
+      localStorage.setItem("nativeAdCoverApiKey", getApiKey());
+      refreshApiStatus();
+    });
+
+    apiKeyInput.addEventListener("input", refreshApiStatus);
+
+    apiKeyInput.value = localStorage.getItem("nativeAdCoverApiKey") || "";
 
     taskList.addEventListener("click", async (event) => {
       const loadButton = event.target.closest("[data-load-task]");
