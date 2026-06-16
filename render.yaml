@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: native-ad-cover-mvp
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TEXT_MODEL
+        value: gpt-5
+      - key: IMAGE_MODEL
+        value: gpt-image-2
+      - key: IMAGE_SIZE
+        value: auto

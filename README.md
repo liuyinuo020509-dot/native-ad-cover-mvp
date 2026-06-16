@@ -1,0 +1,132 @@
+# 原生广告封面生成 MVP
+
+这是一个本地可运行的原生广告封面生成小系统。
+
+它会按三段 Agent 流程工作：
+
+1. 策略理解 Agent：理解 `appName + adCopy`
+2. 封面生成 Agent：生成主标题和图片 Prompt
+3. 质检回流 Agent：检查图片是否像内容封面，而不是硬广
+
+## 功能
+
+- 单条广告生成封面
+- CSV 批量导入广告任务
+- 生成横版 16:9 原生广告封面
+- 自动质检评分
+- 人工标记 selected / rejected / edited / shortlisted
+- 本地记忆：人工偏好、失败模式、平台结果
+- 预留投放结果回流接口
+
+## 本地运行
+
+1. 安装 Node.js 20 或更高版本。
+
+2. 复制环境变量文件：
+
+```powershell
+copy .env.example .env
+```
+
+3. 打开 `.env`，填写你自己的 OpenAI API Key：
+
+```text
+OPENAI_API_KEY=你的_api_key
+TEXT_MODEL=gpt-5
+IMAGE_MODEL=gpt-image-2
+IMAGE_SIZE=auto
+PORT=8787
+```
+
+4. 启动：
+
+```powershell
+.\start.ps1
+```
+
+或：
+
+```bash
+npm start
+```
+
+5. 打开：
+
+```text
+http://localhost:8787
+```
+
+如果 `8787` 已经被占用，程序会自动尝试 `8788`、`8789` 等后续端口。
+
+## CSV 批量导入
+
+页面顶部可以上传 CSV 表格。字段名请保持：
+
+```text
+appName,adCopy,platform,industry,targetAudience,forbiddenItems,count,visualPreference
+```
+
+示例文件：
+
+```text
+native_ad_cover_4_ads_import.csv
+```
+
+## API
+
+```text
+GET  /api/health
+GET  /api/config
+GET  /api/memory
+POST /api/generate
+POST /api/feedback
+POST /api/platform-result
+```
+
+## GitHub 注意事项
+
+不要上传这些文件：
+
+- `.env`
+- `API set.env`
+- `public/generated/`
+- `memory/*.json`
+- `*.log`
+
+这些已经写在 `.gitignore` 里。API Key 只应该放在本地 `.env` 或部署平台的环境变量里。
+
+## 部署说明
+
+这个项目不能直接部署到 GitHub Pages，因为它需要 Node.js 后端来保护 API Key。
+
+推荐方式：
+
+- GitHub 存代码
+- Render / Railway / Fly.io / 服务器 运行 Node.js 服务
+
+部署到 Render 的基本配置：
+
+```text
+Build Command: npm install
+Start Command: npm start
+Environment:
+  OPENAI_API_KEY=你的_api_key
+  TEXT_MODEL=gpt-5
+  IMAGE_MODEL=gpt-image-2
+  IMAGE_SIZE=auto
+  PORT=10000
+```
+
+部署后访问平台给你的网址即可。
+
+## 给别人使用
+
+把 GitHub 仓库地址发给对方。对方 clone 后：
+
+1. 安装 Node.js
+2. 复制 `.env.example` 为 `.env`
+3. 填自己的 `OPENAI_API_KEY`
+4. 运行 `npm start`
+5. 打开本地地址
+
+不要把你的 `.env` 发给别人。
