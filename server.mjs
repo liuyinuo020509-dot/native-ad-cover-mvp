@@ -351,9 +351,11 @@ async function generateImage(prompt, apiKey, input = {}) {
 
 function buildStrategyInput(input) {
   const aspect = getAspectRatioBrief(input);
+  const adSpec = input.ad_spec || input.adSpec || "未填写";
   return `
 应用名称：${input.appName}
 广告文案：${input.adCopy}
+广告规格：${adSpec}
 投放平台：${input.platform || "未填写"}
 行业/品类：${input.industry || "未填写"}
 目标人群：${input.targetAudience || "未填写"}
@@ -365,9 +367,11 @@ function buildStrategyInput(input) {
 
 function buildGenerationInput(input, strategy, memory) {
   const aspect = getAspectRatioBrief(input);
+  const adSpec = input.ad_spec || input.adSpec || "未填写";
   return `
 应用名称：${input.appName}
 广告文案：${input.adCopy}
+广告规格：${adSpec}
 输出比例：${aspect.aspectRatio}（${aspect.orientation}）
 比例硬约束：${aspect.positiveRule} ${aspect.negativeRule}
 构图/生成备注：${input.visualPreference || "未填写"}
@@ -390,9 +394,11 @@ ${JSON.stringify(memory.platformIndustryMemory, null, 2)}
 
 function buildQualityInput(input, strategy, generation, memory) {
   const aspect = getAspectRatioBrief(input);
+  const adSpec = input.ad_spec || input.adSpec || "未填写";
   return `
 应用名称：${input.appName}
 广告文案：${input.adCopy}
+广告规格：${adSpec}
 投放平台：${input.platform || "未填写"}
 行业/品类：${input.industry || "未填写"}
 目标人群：${input.targetAudience || "未填写"}
@@ -433,7 +439,11 @@ function fillMasterPrompt(input) {
 
 function buildFinalImagePrompt(input, strategy, generation, variant) {
   const aspect = getAspectRatioBrief(input);
+  const adSpec = input.ad_spec || input.adSpec || "未填写";
   return `${fillMasterPrompt(input)}
+
+本次广告规格：
+${adSpec}
 
 以下是本次广告的策略理解结果：
 ${JSON.stringify(strategy, null, 2)}

@@ -70,8 +70,10 @@ http://localhost:8787
 页面顶部可以上传 CSV 表格。字段名请保持：
 
 ```text
-appName,adCopy,platform,industry,targetAudience,forbiddenItems,count,visualPreference,aspectRatio
+appName,adCopy,ad_spec,platform,industry,targetAudience,forbiddenItems,count,visualPreference,aspectRatio
 ```
+
+`ad_spec` 是广告规格，例如：信息流封面、App 拉新素材、竖版素材测试。
 
 `aspectRatio` 可填：
 
