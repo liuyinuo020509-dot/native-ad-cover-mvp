@@ -320,6 +320,12 @@
         <label>构图/生成备注</label>
         <textarea name="visualPreference" placeholder="例如：左右构图，右边放文字；或：居中构图，生活场景更自然"></textarea>
 
+        <label>输出比例</label>
+        <select name="aspectRatio">
+          <option value="16:9">横版 16:9</option>
+          <option value="9:16">竖版 9:16</option>
+        </select>
+
         <label>生成数量</label>
         <select name="count">
           <option value="1">1 张，适合先测试成本</option>
@@ -526,7 +532,7 @@
                   <div class="download-row">
                     <button type="button" data-download-asset="0:${index}">下载图片</button>
                   </div>
-                  <textarea class="note" data-note="${index}" placeholder="可选：写下为什么选中/拒绝/编辑，例如：主体更真实、标题太广告、色彩太硬广"></textarea>
+                  <textarea class="note" data-note="${index}" placeholder="拒绝时请填写理由，例如：广告主名称太小、主体不明确、比例不对；选中/备选时可选填原因"></textarea>
                   <pre>${esc(JSON.stringify(asset.quality, null, 2))}</pre>
                 </div>
               </div>
@@ -555,6 +561,9 @@
         clicked.textContent = "记录中";
       }
       try {
+        if (action === "rejected" && !note.trim()) {
+          throw new Error("拒绝前请先填写拒绝理由，系统会按这个理由重生成。");
+        }
         const rsp = await fetch("/api/feedback", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -569,6 +578,28 @@
         });
         const data = await rsp.json();
         if (!rsp.ok) throw new Error(data.error || "记录失败");
+        if (action === "rejected") {
+          if (clicked) clicked.textContent = "重生成中";
+          const regenRsp = await fetch("/api/regenerate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              input: lastResult.input,
+              strategy: lastResult.strategy,
+              generation: lastResult.generation,
+              asset,
+              rejectionReason: note,
+              strictImageRules: lastResult.strictImageRules,
+              apiKey: getApiKey(),
+            }),
+          });
+          const regenData = await regenRsp.json();
+          if (!regenRsp.ok) throw new Error(regenData.error || "重生成失败");
+          lastResult.assets = [...(lastResult.assets || []), regenData.asset];
+          allGeneratedResults[0] = lastResult;
+          render(lastResult);
+          return;
+        }
         if (clicked) clicked.textContent = "已记录";
       } catch (error) {
         if (clicked) {

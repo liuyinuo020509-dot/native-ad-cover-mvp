@@ -33,12 +33,49 @@ const textModel = env.TEXT_MODEL || "gpt-5";
 const imageModel = env.IMAGE_MODEL || "gpt-image-2";
 const imageSize = env.IMAGE_SIZE || "auto";
 const generationSystemPrompt = buildGenerationSystemPrompt(nativeAdImageMasterPrompt);
-const strictImageRules = {
-  aspectRatio: "16:9",
-  mustBeHorizontal: true,
+const defaultStrictImageRules = {
   forbiddenVisuals: ["logo", "icon", "二维码", "下载按钮", "联系方式", "水印"],
   forbiddenCopy: ["立即下载", "点击领取", "限时抢购"],
+  allowedText: ["主标题", "极短辅助信息", "应用名称纯文字"],
 };
+
+function normalizeAspectRatio(value) {
+  return value === "9:16" ? "9:16" : "16:9";
+}
+
+function getAspectRatioBrief(input = {}) {
+  const aspectRatio = normalizeAspectRatio(input.aspectRatio);
+  return aspectRatio === "9:16"
+    ? {
+        aspectRatio,
+        orientation: "竖版",
+        mustBeHorizontal: false,
+        mustBeVertical: true,
+        positiveRule: "必须严格生成竖版 9:16 构图，适合手机竖屏信息流。",
+        negativeRule: "不要生成横版 16:9、方图 1:1 或任何非 9:16 比例。",
+      }
+    : {
+        aspectRatio,
+        orientation: "横版",
+        mustBeHorizontal: true,
+        mustBeVertical: false,
+        positiveRule: "必须严格生成横版 16:9 构图，适合横向内容封面。",
+        negativeRule: "不要生成竖版 9:16、方图 1:1 或任何非 16:9 比例。",
+      };
+}
+
+function buildStrictImageRules(input = {}) {
+  return {
+    ...defaultStrictImageRules,
+    ...getAspectRatioBrief(input),
+  };
+}
+
+function resolveImageSize(input = {}) {
+  const aspectRatio = normalizeAspectRatio(input.aspectRatio);
+  if (aspectRatio === "9:16") return env.IMAGE_SIZE_9_16 || "1024x1536";
+  return env.IMAGE_SIZE_16_9 || imageSize || "1536x1024";
+}
 
 async function loadDotEnv(filePath) {
   if (!existsSync(filePath)) return;
@@ -256,13 +293,13 @@ async function callResponsesWithImage({ instructions, text, imageDataUrl, apiKey
   return parseModelJson(extractOutputText(data), resolvedApiKey);
 }
 
-async function generateImage(prompt, apiKey) {
+async function generateImage(prompt, apiKey, input = {}) {
   const resolvedApiKey = requireApiKey({ apiKey });
 
   const body = {
     model: imageModel,
     prompt,
-    size: imageSize,
+    size: resolveImageSize(input),
   };
 
   let rsp;
@@ -313,6 +350,7 @@ async function generateImage(prompt, apiKey) {
 }
 
 function buildStrategyInput(input) {
+  const aspect = getAspectRatioBrief(input);
   return `
 应用名称：${input.appName}
 广告文案：${input.adCopy}
@@ -320,14 +358,18 @@ function buildStrategyInput(input) {
 行业/品类：${input.industry || "未填写"}
 目标人群：${input.targetAudience || "未填写"}
 禁用词/禁用元素：${input.forbiddenItems || "二维码、下载按钮、水印、联系方式、夸张承诺"}
+输出比例：${aspect.aspectRatio}（${aspect.orientation}）
 构图/生成备注：${input.visualPreference || "未填写"}
 `;
 }
 
 function buildGenerationInput(input, strategy, memory) {
+  const aspect = getAspectRatioBrief(input);
   return `
 应用名称：${input.appName}
 广告文案：${input.adCopy}
+输出比例：${aspect.aspectRatio}（${aspect.orientation}）
+比例硬约束：${aspect.positiveRule} ${aspect.negativeRule}
 构图/生成备注：${input.visualPreference || "未填写"}
 
 策略理解结果：
@@ -342,11 +384,12 @@ ${JSON.stringify(memory.previousQualityFailures, null, 2)}
 platformIndustryMemory：
 ${JSON.stringify(memory.platformIndustryMemory, null, 2)}
 
-请生成横版 16:9 原生广告封面 Prompt。
+请生成${aspect.orientation} ${aspect.aspectRatio} 原生广告封面 Prompt。
 `;
 }
 
 function buildQualityInput(input, strategy, generation, memory) {
+  const aspect = getAspectRatioBrief(input);
   return `
 应用名称：${input.appName}
 广告文案：${input.adCopy}
@@ -354,6 +397,8 @@ function buildQualityInput(input, strategy, generation, memory) {
 行业/品类：${input.industry || "未填写"}
 目标人群：${input.targetAudience || "未填写"}
 禁用词/禁用元素：${input.forbiddenItems || "二维码、下载按钮、水印、联系方式、夸张承诺"}
+输出比例：${aspect.aspectRatio}（${aspect.orientation}）
+比例硬约束：${aspect.positiveRule} ${aspect.negativeRule}
 构图/生成备注：${input.visualPreference || "未填写"}
 
 策略理解结果：
@@ -376,12 +421,18 @@ ${JSON.stringify(memory.platformIndustryMemory, null, 2)}
 }
 
 function fillMasterPrompt(input) {
+  const aspect = getAspectRatioBrief(input);
   return nativeAdImageMasterPrompt
     .replaceAll("{{appName}}", input.appName || "")
-    .replaceAll("{{adCopy}}", input.adCopy || "");
+    .replaceAll("{{adCopy}}", input.adCopy || "")
+    .replaceAll("{{aspectRatio}}", aspect.aspectRatio)
+    .replaceAll("{{orientation}}", aspect.orientation)
+    .replaceAll("{{aspectPositiveRule}}", aspect.positiveRule)
+    .replaceAll("{{aspectNegativeRule}}", aspect.negativeRule);
 }
 
 function buildFinalImagePrompt(input, strategy, generation, variant) {
+  const aspect = getAspectRatioBrief(input);
   return `${fillMasterPrompt(input)}
 
 以下是本次广告的策略理解结果：
@@ -409,10 +460,12 @@ ${JSON.stringify({
 ${generation.negativePrompt || "不要二维码、下载按钮、水印、大段小字、乱码、错别字、传统商业海报感"}
 
 最终不可违背硬约束：
-- 必须是横版 16:9 构图，不要生成竖版、方图、9:16 或 1:1。
+- ${aspect.positiveRule}
+- ${aspect.negativeRule}
 - 不要渲染 logo、icon、二维码、联系方式、水印、下载按钮。
 - 不要出现“立即下载”“点击领取”“限时抢购”等强转化文案。
 - 应用名称只能以纯文字出现，不能画成品牌图形标识。
+- 允许画面中出现：一个主标题、最多一条极短辅助信息、应用名称纯文字。不要把这些合规文字误判为“禁止内嵌字”。
 `;
 }
 
@@ -501,7 +554,7 @@ async function handleGenerate(req, res) {
   for (let i = 0; i < count; i += 1) {
     const variant = variants[i % variants.length];
     const prompt = buildFinalImagePrompt(input, strategy, generation, variant);
-    const image = await generateImage(prompt, apiKey);
+    const image = await generateImage(prompt, apiKey, input);
     const quality = await callResponsesWithImage({
       instructions: qualitySystemPrompt,
       text: buildQualityInput(input, strategy, generation, memory),
@@ -523,12 +576,76 @@ async function handleGenerate(req, res) {
   sendJson(res, 200, {
     status: "completed",
     input: safeInput,
-    strictImageRules,
+    strictImageRules: buildStrictImageRules(input),
     memoryUsed: memory,
     strategy,
     generation,
     assets,
     bestAsset: assets[0] || null,
+  });
+}
+
+async function handleRegenerate(req, res) {
+  const raw = await collectBody(req);
+  const body = JSON.parse(raw || "{}");
+  const input = body.input || {};
+  const rejectedAsset = body.asset || {};
+  const rejectionReason = String(body.rejectionReason || body.note || "").trim();
+  const apiKey = resolveApiKey(body);
+
+  if (!input.appName || !input.adCopy) {
+    return sendJson(res, 400, { error: "重生成需要原始 input.appName 和 input.adCopy" });
+  }
+  if (!apiKey) {
+    return sendJson(res, 400, { error: "请先在页面顶部填写你自己的 OpenAI API Key。" });
+  }
+  if (!rejectionReason) {
+    return sendJson(res, 400, { error: "请先填写拒绝理由，例如：广告主名称太小、主体不明确、比例不对。" });
+  }
+
+  const memory = await loadMemoryBundle();
+  const strategy = body.strategy || await callResponses({
+    instructions: strategySystemPrompt,
+    input: buildStrategyInput(input),
+    apiKey,
+  });
+  const generation = body.generation || await callResponses({
+    instructions: generationSystemPrompt,
+    input: buildGenerationInput(input, strategy, memory),
+    apiKey,
+  });
+  const variant = {
+    variantName: `按拒绝理由重生成`,
+    prompt: `${rejectedAsset.prompt || generation.imagePrompt || ""}\n\n这张图被人工拒绝，拒绝理由：${rejectionReason}\n请严格修正该问题，同时保持原始应用、广告文案、输出比例和禁用项不变。不要重复旧图的问题。`,
+  };
+  const prompt = buildFinalImagePrompt(input, strategy, generation, variant);
+  const image = await generateImage(prompt, apiKey, input);
+  const quality = await callResponsesWithImage({
+    instructions: qualitySystemPrompt,
+    text: `${buildQualityInput(input, strategy, generation, memory)}\n\n本次为拒绝后重生成，原拒绝理由：${rejectionReason}`,
+    imageDataUrl: image.imageDataUrl,
+    apiKey,
+  });
+  const regeneratedAsset = {
+    assetId: `regen_${Date.now()}`,
+    variantName: "拒绝后重生成",
+    imageUrl: image.imageUrl,
+    prompt,
+    quality,
+    regeneratedFrom: rejectedAsset.assetId || null,
+    rejectionReason,
+  };
+  await updateQualityFailureMemory(input, regeneratedAsset);
+
+  const safeInput = { ...input };
+  delete safeInput.apiKey;
+  sendJson(res, 200, {
+    status: "regenerated",
+    input: safeInput,
+    strictImageRules: buildStrictImageRules(input),
+    strategy,
+    generation,
+    asset: regeneratedAsset,
   });
 }
 
@@ -583,7 +700,7 @@ async function handleFeedback(req, res) {
       input: JSON.stringify({
         feedbackRecord: record,
         currentHumanPreferenceMemory: currentMemory,
-        strictImageRules,
+        strictImageRules: body.strictImageRules || buildStrictImageRules(body.input || body),
       }, null, 2),
       apiKey,
     });
@@ -647,7 +764,7 @@ async function handlePlatformResult(req, res) {
       input: JSON.stringify({
         platformResult: resultRecord,
         currentPlatformResultMemory: memory,
-        strictImageRules,
+        strictImageRules: body.strictImageRules || buildStrictImageRules(body.input || body),
       }, null, 2),
       apiKey,
     });
@@ -725,6 +842,10 @@ function createAppServer() {
     try {
       if (req.method === "POST" && req.url === "/api/generate") {
         await handleGenerate(req, res);
+        return;
+      }
+      if (req.method === "POST" && req.url === "/api/regenerate") {
+        await handleRegenerate(req, res);
         return;
       }
       if (req.method === "GET" && req.url === "/api/memory") {

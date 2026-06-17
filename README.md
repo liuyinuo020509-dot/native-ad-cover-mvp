@@ -12,10 +12,11 @@
 
 - 单条广告生成封面
 - CSV 批量导入广告任务
-- 生成横版 16:9 原生广告封面
+- 生成横版 16:9 或竖版 9:16 原生广告封面
 - 自动质检评分
 - 单张图片下载
 - 批量结果选择文件夹保存全部图片
+- 拒绝素材后按拒绝理由自动重生成
 - 人工标记 selected / rejected / edited / shortlisted
 - 本地记忆：人工偏好、失败模式、平台结果
 - 预留投放结果回流接口
@@ -69,7 +70,14 @@ http://localhost:8787
 页面顶部可以上传 CSV 表格。字段名请保持：
 
 ```text
-appName,adCopy,platform,industry,targetAudience,forbiddenItems,count,visualPreference
+appName,adCopy,platform,industry,targetAudience,forbiddenItems,count,visualPreference,aspectRatio
+```
+
+`aspectRatio` 可填：
+
+```text
+16:9
+9:16
 ```
 
 示例文件：
@@ -84,6 +92,8 @@ native_ad_cover_4_ads_import.csv
 
 - 点击单张图片旁边的“下载图片”
 - 点击“选择文件夹保存全部图片”，把所有已生成图片保存到本地文件夹
+
+如果点击“拒绝”，请先填写拒绝理由，例如“广告主名称太小”“主体不明确”“比例不对”。系统会按这个理由自动重生成一张。
 
 ## API
 

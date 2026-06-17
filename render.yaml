@@ -13,3 +13,7 @@ services:
         value: gpt-image-2
       - key: IMAGE_SIZE
         value: auto
+      - key: IMAGE_SIZE_16_9
+        value: 1536x1024
+      - key: IMAGE_SIZE_9_16
+        value: 1024x1536
