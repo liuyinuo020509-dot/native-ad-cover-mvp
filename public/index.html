@@ -301,7 +301,10 @@
         <textarea name="adCopy" placeholder="例如：3分钟做出爆款短视频，新手也能快速上手" required></textarea>
 
         <label>广告规格</label>
-        <input name="ad_spec" placeholder="例如：信息流封面 / App 拉新 / 素材测试" />
+        <select name="ad_spec">
+          <option value="16:9">横版 16:9</option>
+          <option value="9:16">竖版 9:16</option>
+        </select>
 
         <div class="grid">
           <div>
@@ -322,12 +325,6 @@
 
         <label>构图/生成备注</label>
         <textarea name="visualPreference" placeholder="例如：左右构图，右边放文字；或：居中构图，生活场景更自然"></textarea>
-
-        <label>输出比例</label>
-        <select name="aspectRatio">
-          <option value="16:9">横版 16:9</option>
-          <option value="9:16">竖版 9:16</option>
-        </select>
 
         <label>生成数量</label>
         <select name="count">
@@ -443,6 +440,11 @@
       alert(`已保存 ${items.length} 张图片到你选择的文件夹。`);
     }
 
+    function normalizeAdSpec(value) {
+      const text = String(value || "").replace("：", ":").trim();
+      return /9\s*:\s*16/.test(text) ? "9:16" : "16:9";
+    }
+
     function parseCsv(text) {
       const rows = [];
       let row = [];
@@ -479,12 +481,15 @@
         headers.forEach((header, index) => {
           item[header] = (values[index] || "").trim();
         });
+        if (!item.ad_spec && item.aspectRatio) item.ad_spec = item.aspectRatio;
+        item.ad_spec = normalizeAdSpec(item.ad_spec);
         return item;
       }).filter((item) => item.appName && item.adCopy);
     }
 
     function loadTask(task) {
-      for (const [key, value] of Object.entries(task)) {
+      const normalizedTask = { ...task, ad_spec: normalizeAdSpec(task.ad_spec || task.aspectRatio) };
+      for (const [key, value] of Object.entries(normalizedTask)) {
         const field = form.elements[key];
         if (field) field.value = value;
       }
@@ -498,7 +503,7 @@
         <div class="task-item">
           <div>
             <strong>${esc(index + 1)}. ${esc(task.appName)}</strong>
-            <span>${esc(task.adCopy)}${task.ad_spec ? " | " + esc(task.ad_spec) : ""}${task.visualPreference ? " | " + esc(task.visualPreference) : ""}</span>
+            <span>${esc(task.adCopy)}${task.ad_spec ? " | 广告规格：" + esc(task.ad_spec) : ""}${task.visualPreference ? " | " + esc(task.visualPreference) : ""}</span>
           </div>
           <div class="task-actions">
             <button type="button" data-load-task="${index}">载入</button>

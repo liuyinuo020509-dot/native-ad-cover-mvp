@@ -39,12 +39,18 @@ const defaultStrictImageRules = {
   allowedText: ["主标题", "极短辅助信息", "应用名称纯文字"],
 };
 
+function getAdSpec(input = {}) {
+  return input.ad_spec || input.adSpec || input.aspectRatio || "16:9";
+}
+
 function normalizeAspectRatio(value) {
-  return value === "9:16" ? "9:16" : "16:9";
+  const text = String(value || "").replace("：", ":").trim();
+  if (/9\s*:\s*16/.test(text)) return "9:16";
+  return "16:9";
 }
 
 function getAspectRatioBrief(input = {}) {
-  const aspectRatio = normalizeAspectRatio(input.aspectRatio);
+  const aspectRatio = normalizeAspectRatio(getAdSpec(input));
   return aspectRatio === "9:16"
     ? {
         aspectRatio,
@@ -72,7 +78,7 @@ function buildStrictImageRules(input = {}) {
 }
 
 function resolveImageSize(input = {}) {
-  const aspectRatio = normalizeAspectRatio(input.aspectRatio);
+  const aspectRatio = normalizeAspectRatio(getAdSpec(input));
   if (aspectRatio === "9:16") return env.IMAGE_SIZE_9_16 || "1024x1536";
   return env.IMAGE_SIZE_16_9 || imageSize || "1536x1024";
 }
@@ -351,7 +357,7 @@ async function generateImage(prompt, apiKey, input = {}) {
 
 function buildStrategyInput(input) {
   const aspect = getAspectRatioBrief(input);
-  const adSpec = input.ad_spec || input.adSpec || "未填写";
+  const adSpec = getAdSpec(input);
   return `
 应用名称：${input.appName}
 广告文案：${input.adCopy}
@@ -367,7 +373,7 @@ function buildStrategyInput(input) {
 
 function buildGenerationInput(input, strategy, memory) {
   const aspect = getAspectRatioBrief(input);
-  const adSpec = input.ad_spec || input.adSpec || "未填写";
+  const adSpec = getAdSpec(input);
   return `
 应用名称：${input.appName}
 广告文案：${input.adCopy}
@@ -394,7 +400,7 @@ ${JSON.stringify(memory.platformIndustryMemory, null, 2)}
 
 function buildQualityInput(input, strategy, generation, memory) {
   const aspect = getAspectRatioBrief(input);
-  const adSpec = input.ad_spec || input.adSpec || "未填写";
+  const adSpec = getAdSpec(input);
   return `
 应用名称：${input.appName}
 广告文案：${input.adCopy}
@@ -439,7 +445,7 @@ function fillMasterPrompt(input) {
 
 function buildFinalImagePrompt(input, strategy, generation, variant) {
   const aspect = getAspectRatioBrief(input);
-  const adSpec = input.ad_spec || input.adSpec || "未填写";
+  const adSpec = getAdSpec(input);
   return `${fillMasterPrompt(input)}
 
 本次广告规格：
