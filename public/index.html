@@ -675,11 +675,12 @@
         const data = await rsp.json();
         const hasUserKey = !!getApiKey();
         apiStatus.className = `status ${hasUserKey || data.hasServerApiKey ? "ok" : "bad"}`;
+        const versionText = data.appVersion ? ` · 版本 ${data.appVersion}` : "";
         apiStatus.textContent = hasUserKey
-          ? `已填写用户 Key：${data.textModel} / ${data.imageModel}`
+          ? `已填写用户 Key：${data.textModel} / ${data.imageModel}${versionText}`
           : data.hasServerApiKey
-            ? `服务器已配置备用 Key：${data.textModel} / ${data.imageModel}`
-            : "请先填写你自己的 OpenAI API Key";
+            ? `服务器已配置备用 Key：${data.textModel} / ${data.imageModel}${versionText}`
+            : `请先填写你自己的 OpenAI API Key${versionText}`;
       } catch {
         apiStatus.className = "status bad";
         apiStatus.textContent = "API 状态读取失败：请重启服务";

@@ -32,6 +32,7 @@ let currentPort = preferredPort;
 const textModel = env.TEXT_MODEL || "gpt-5";
 const imageModel = env.IMAGE_MODEL || "gpt-image-2";
 const imageSize = env.IMAGE_SIZE || "auto";
+const appVersion = (env.RENDER_GIT_COMMIT || env.COMMIT_SHA || "local").slice(0, 7);
 const generationSystemPrompt = buildGenerationSystemPrompt(nativeAdImageMasterPrompt);
 const defaultStrictImageRules = {
   forbiddenVisuals: ["logo", "icon", "二维码", "下载按钮", "联系方式", "水印"],
@@ -820,6 +821,7 @@ function handleConfig(req, res) {
     textModel,
     imageModel,
     imageSize,
+    appVersion,
     port: currentPort,
   });
 }
@@ -828,6 +830,7 @@ function handleHealth(req, res) {
   sendJson(res, 200, {
     status: "ok",
     service: "native-ad-cover-mvp",
+    appVersion,
     hasServerApiKey: !!env.OPENAI_API_KEY,
     acceptsUserApiKey: true,
     time: new Date().toISOString(),
@@ -852,7 +855,11 @@ async function serveStatic(req, res) {
       ".js": "text/javascript; charset=utf-8",
       ".png": "image/png",
     };
-    res.writeHead(200, { "content-type": types[ext] || "application/octet-stream" });
+    const headers = { "content-type": types[ext] || "application/octet-stream" };
+    if (ext === ".html") {
+      headers["cache-control"] = "no-store, max-age=0";
+    }
+    res.writeHead(200, headers);
     res.end(data);
   } catch {
     res.writeHead(404);
