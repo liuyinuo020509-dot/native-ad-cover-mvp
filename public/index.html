@@ -134,6 +134,29 @@
       color: var(--red);
       border-color: #f2c6c6;
     }
+    .download-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0;
+    }
+    .download-row button,
+    .download-row a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: auto;
+      margin-top: 0;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #c9d8ff;
+      background: #eef3ff;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+    }
     .note {
       margin-top: 8px;
       min-height: 42px;
@@ -326,6 +349,7 @@
     const saveApiKey = document.getElementById("saveApiKey");
     let lastResult = null;
     let importedTasks = [];
+    let allGeneratedResults = [];
 
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
@@ -339,6 +363,75 @@
 
     function jsonBlock(title, data) {
       return `<div class="card"><h2>${esc(title)}</h2><pre>${esc(JSON.stringify(data, null, 2))}</pre></div>`;
+    }
+
+    function fileSafeName(value) {
+      return String(value || "cover")
+        .replace(/[\\/:*?"<>|]+/g, "_")
+        .replace(/\s+/g, "_")
+        .slice(0, 80);
+    }
+
+    function assetFileName(result, asset, index) {
+      const appName = fileSafeName(result?.input?.appName || "ad");
+      const variant = fileSafeName(asset?.variantName || `asset_${index + 1}`);
+      return `${appName}_${variant}_${asset?.assetId || index + 1}.png`;
+    }
+
+    function collectAssets(results = allGeneratedResults) {
+      const items = [];
+      for (const item of results || []) {
+        if (item?.status === "failed") continue;
+        for (const [index, asset] of (item.assets || []).entries()) {
+          items.push({ result: item, asset, index });
+        }
+      }
+      return items;
+    }
+
+    async function fetchAssetBlob(asset) {
+      const rsp = await fetch(asset.imageUrl);
+      if (!rsp.ok) throw new Error(`下载失败：${asset.imageUrl}`);
+      return rsp.blob();
+    }
+
+    async function downloadAsset(resultIndex, assetIndex) {
+      const resultItem = allGeneratedResults[resultIndex] || lastResult;
+      const asset = resultItem?.assets?.[assetIndex];
+      if (!asset) return;
+      const blob = await fetchAssetBlob(asset);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = assetFileName(resultItem, asset, assetIndex);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function saveAllAssetsToFolder() {
+      const items = collectAssets();
+      if (!items.length) {
+        alert("还没有可下载的图片。");
+        return;
+      }
+      if (!window.showDirectoryPicker) {
+        alert("当前浏览器不支持直接选择保存文件夹。我会改用浏览器默认下载方式逐张下载；如果想每次选择路径，请在浏览器下载设置里打开“下载前询问保存位置”。");
+        for (const [i, item] of items.entries()) {
+          await downloadAsset(allGeneratedResults.indexOf(item.result), item.index);
+        }
+        return;
+      }
+      const dir = await window.showDirectoryPicker();
+      for (const item of items) {
+        const blob = await fetchAssetBlob(item.asset);
+        const handle = await dir.getFileHandle(assetFileName(item.result, item.asset, item.index), { create: true });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      }
+      alert(`已保存 ${items.length} 张图片到你选择的文件夹。`);
     }
 
     function parseCsv(text) {
@@ -408,6 +501,7 @@
 
     function render(data) {
       lastResult = data;
+      allGeneratedResults = [data];
       const assets = data.assets || [];
       result.className = "";
       result.innerHTML = `
@@ -428,6 +522,9 @@
                     <button type="button" data-feedback="${index}" data-action="shortlisted">备选</button>
                     <button type="button" data-feedback="${index}" data-action="edited">已编辑</button>
                     <button type="button" data-feedback="${index}" data-action="rejected">拒绝</button>
+                  </div>
+                  <div class="download-row">
+                    <button type="button" data-download-asset="0:${index}">下载图片</button>
                   </div>
                   <textarea class="note" data-note="${index}" placeholder="可选：写下为什么选中/拒绝/编辑，例如：主体更真实、标题太广告、色彩太硬广"></textarea>
                   <pre>${esc(JSON.stringify(asset.quality, null, 2))}</pre>
@@ -483,6 +580,17 @@
     }
 
     result.addEventListener("click", (event) => {
+      const downloadTarget = event.target.closest("[data-download-asset]");
+      if (downloadTarget) {
+        const [resultIndex, assetIndex] = downloadTarget.dataset.downloadAsset.split(":").map(Number);
+        downloadAsset(resultIndex, assetIndex).catch((error) => alert(error.message));
+        return;
+      }
+      const downloadAllTarget = event.target.closest("[data-download-all]");
+      if (downloadAllTarget) {
+        saveAllAssetsToFolder().catch((error) => alert(error.message));
+        return;
+      }
       const target = event.target.closest("[data-feedback]");
       if (!target) return;
       recordFeedback(Number(target.dataset.feedback), target.dataset.action);
@@ -502,7 +610,7 @@
         const rsp = await fetch("/api/generate", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(attachApiKey(payload)),
         });
         const data = await rsp.json();
         if (!rsp.ok) throw new Error(data.error || "生成失败");
@@ -589,31 +697,55 @@
       button.disabled = true;
       batchGenerate.disabled = true;
       const batchResults = [];
-      try {
-        for (let i = 0; i < importedTasks.length; i += 1) {
-          const task = importedTasks[i];
-          result.className = "empty";
-          result.textContent = `正在批量生成 ${i + 1}/${importedTasks.length}：${task.appName}`;
-          batchResults.push(await generatePayload({ ...task, count: Number(task.count || 1) }));
-        }
+      allGeneratedResults = batchResults;
+      const renderBatch = (currentText = "") => {
         result.className = "";
-        result.innerHTML = batchResults.map((item, index) => `
+        result.innerHTML = `
+          <div class="memory-note">
+            ${esc(currentText || `批量任务：已完成 ${batchResults.filter((item) => item.status !== "failed").length} 条，失败 ${batchResults.filter((item) => item.status === "failed").length} 条。`)}
+            <div class="download-row" style="margin-top:10px;">
+              <button type="button" data-download-all="1">选择文件夹保存全部图片</button>
+            </div>
+          </div>
+          ${batchResults.map((item, resultIndex) => item.status === "failed" ? `
+            <div class="card">
+              <h2>${esc(resultIndex + 1)}. ${esc(item.input?.appName || "生成失败")}</h2>
+              <p style="color: var(--red);">${esc(item.error)}</p>
+            </div>
+          ` : `
           <div class="card">
-            <h2>${esc(index + 1)}. ${esc(item.input.appName)}</h2>
-            ${(item.assets || []).map((asset) => `
+            <h2>${esc(resultIndex + 1)}. ${esc(item.input.appName)}</h2>
+            ${(item.assets || []).map((asset, assetIndex) => `
               <div class="asset">
                 <img src="${esc(asset.imageUrl)}" alt="${esc(asset.variantName)}">
                 <div>
                   <p><strong>${esc(asset.variantName)}</strong> <span class="score ${(asset.quality?.totalScore ?? 0) < 80 ? "bad" : ""}">${esc(asset.quality?.totalScore ?? 0)}</span></p>
+                  <div class="download-row">
+                    <button type="button" data-download-asset="${resultIndex}:${assetIndex}">下载图片</button>
+                  </div>
                   <pre>${esc(JSON.stringify(asset.quality, null, 2))}</pre>
                 </div>
               </div>
             `).join("")}
           </div>
-        `).join("");
-      } catch (error) {
-        result.className = "empty";
-        result.textContent = error.message;
+        `).join("")}
+        `;
+      };
+      try {
+        for (let i = 0; i < importedTasks.length; i += 1) {
+          const task = importedTasks[i];
+          renderBatch(`正在批量生成 ${i + 1}/${importedTasks.length}：${task.appName}`);
+          try {
+            batchResults.push(await generatePayload({ ...task, count: Number(task.count || 1) }));
+          } catch (error) {
+            batchResults.push({
+              status: "failed",
+              input: task,
+              error: error.message,
+            });
+          }
+          renderBatch();
+        }
       } finally {
         button.disabled = false;
         batchGenerate.disabled = importedTasks.length === 0;

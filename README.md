@@ -14,6 +14,8 @@
 - CSV 批量导入广告任务
 - 生成横版 16:9 原生广告封面
 - 自动质检评分
+- 单张图片下载
+- 批量结果选择文件夹保存全部图片
 - 人工标记 selected / rejected / edited / shortlisted
 - 本地记忆：人工偏好、失败模式、平台结果
 - 预留投放结果回流接口
@@ -75,6 +77,13 @@ appName,adCopy,platform,industry,targetAudience,forbiddenItems,count,visualPrefe
 ```text
 native_ad_cover_4_ads_import.csv
 ```
+
+批量生成过程中，成功的图片会立即显示并保留；如果后续某条失败，前面已经生成的图片仍然可以下载。
+
+生成结果里可以：
+
+- 点击单张图片旁边的“下载图片”
+- 点击“选择文件夹保存全部图片”，把所有已生成图片保存到本地文件夹
 
 ## API
 

@@ -158,6 +158,40 @@ function parseJsonLoose(text) {
   }
 }
 
+async function repairModelJson({ text, parseError, apiKey }) {
+  const resolvedApiKey = requireApiKey({ apiKey });
+  let rsp;
+  try {
+    rsp = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${resolvedApiKey}`,
+      },
+      body: JSON.stringify({
+        model: textModel,
+        instructions: "你是 JSON 修复器。把用户提供的内容修复成严格合法 JSON。只输出 JSON，不要解释，不要 Markdown。",
+        input: `解析错误：${parseError.message}\n\n待修复内容：\n${text}`,
+      }),
+    });
+  } catch (error) {
+    throw new Error(`模型返回的 JSON 格式有误，自动修复时连接失败。原始解析错误：${parseError.message}`);
+  }
+  const data = await rsp.json();
+  if (!rsp.ok) {
+    throw new Error(`模型返回的 JSON 格式有误，自动修复失败：${data.error?.message || rsp.status}`);
+  }
+  return parseJsonLoose(extractOutputText(data));
+}
+
+async function parseModelJson(text, apiKey) {
+  try {
+    return parseJsonLoose(text);
+  } catch (error) {
+    return repairModelJson({ text, parseError: error, apiKey });
+  }
+}
+
 async function callResponses({ instructions, input, apiKey }) {
   const resolvedApiKey = requireApiKey({ apiKey });
 
@@ -183,7 +217,7 @@ async function callResponses({ instructions, input, apiKey }) {
   if (!rsp.ok) {
     throw new Error(data.error?.message || `Responses API 请求失败：${rsp.status}`);
   }
-  return parseJsonLoose(extractOutputText(data));
+  return parseModelJson(extractOutputText(data), resolvedApiKey);
 }
 
 async function callResponsesWithImage({ instructions, text, imageDataUrl, apiKey }) {
@@ -219,7 +253,7 @@ async function callResponsesWithImage({ instructions, text, imageDataUrl, apiKey
   if (!rsp.ok) {
     throw new Error(data.error?.message || `图片质检请求失败：${rsp.status}`);
   }
-  return parseJsonLoose(extractOutputText(data));
+  return parseModelJson(extractOutputText(data), resolvedApiKey);
 }
 
 async function generateImage(prompt, apiKey) {
