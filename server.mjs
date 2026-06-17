@@ -49,6 +49,13 @@ function normalizeAspectRatio(value) {
   return "16:9";
 }
 
+function normalizeInput(input = {}) {
+  return {
+    ...input,
+    ad_spec: normalizeAspectRatio(getAdSpec(input)),
+  };
+}
+
 function getAspectRatioBrief(input = {}) {
   const aspectRatio = normalizeAspectRatio(getAdSpec(input));
   return aspectRatio === "9:16"
@@ -537,7 +544,7 @@ function mergePreferenceMemory(memory, attribution, record) {
 
 async function handleGenerate(req, res) {
   const raw = await collectBody(req);
-  const input = JSON.parse(raw || "{}");
+  const input = normalizeInput(JSON.parse(raw || "{}"));
   if (!input.appName || !input.adCopy) {
     return sendJson(res, 400, { error: "appName 和 adCopy 必填" });
   }
@@ -604,7 +611,7 @@ async function handleGenerate(req, res) {
 async function handleRegenerate(req, res) {
   const raw = await collectBody(req);
   const body = JSON.parse(raw || "{}");
-  const input = body.input || {};
+  const input = normalizeInput(body.input || {});
   const rejectedAsset = body.asset || {};
   const rejectionReason = String(body.rejectionReason || body.note || "").trim();
   const apiKey = resolveApiKey(body);

@@ -445,6 +445,13 @@
       return /9\s*:\s*16/.test(text) ? "9:16" : "16:9";
     }
 
+    function normalizeTaskPayload(task) {
+      return {
+        ...task,
+        ad_spec: normalizeAdSpec(task.ad_spec || task.aspectRatio),
+      };
+    }
+
     function parseCsv(text) {
       const rows = [];
       let row = [];
@@ -482,13 +489,12 @@
           item[header] = (values[index] || "").trim();
         });
         if (!item.ad_spec && item.aspectRatio) item.ad_spec = item.aspectRatio;
-        item.ad_spec = normalizeAdSpec(item.ad_spec);
-        return item;
+        return normalizeTaskPayload(item);
       }).filter((item) => item.appName && item.adCopy);
     }
 
     function loadTask(task) {
-      const normalizedTask = { ...task, ad_spec: normalizeAdSpec(task.ad_spec || task.aspectRatio) };
+      const normalizedTask = normalizeTaskPayload(task);
       for (const [key, value] of Object.entries(normalizedTask)) {
         const field = form.elements[key];
         if (field) field.value = value;
@@ -642,7 +648,7 @@
       result.className = "empty";
       result.textContent = "正在运行 Agent 1、Agent 2、图片生成和 Agent 3 质检。";
 
-      const payload = Object.fromEntries(new FormData(form).entries());
+      const payload = normalizeTaskPayload(Object.fromEntries(new FormData(form).entries()));
       payload.count = Number(payload.count || 1);
 
       try {
@@ -722,7 +728,7 @@
         result.className = "empty";
         result.textContent = `正在生成：${task.appName}`;
         try {
-          render(await generatePayload({ ...task, count: Number(task.count || 1) }));
+          render(await generatePayload({ ...normalizeTaskPayload(task), count: Number(task.count || 1) }));
         } catch (error) {
           result.textContent = error.message;
         } finally {
@@ -754,6 +760,7 @@
           ` : `
           <div class="card">
             <h2>${esc(resultIndex + 1)}. ${esc(item.input.appName)}</h2>
+            <p>广告规格：${esc(item.input.ad_spec || "16:9")}</p>
             ${(item.assets || []).map((asset, assetIndex) => `
               <div class="asset">
                 <img src="${esc(asset.imageUrl)}" alt="${esc(asset.variantName)}">
@@ -772,7 +779,7 @@
       };
       try {
         for (let i = 0; i < importedTasks.length; i += 1) {
-          const task = importedTasks[i];
+          const task = normalizeTaskPayload(importedTasks[i]);
           renderBatch(`正在批量生成 ${i + 1}/${importedTasks.length}：${task.appName}`);
           try {
             batchResults.push(await generatePayload({ ...task, count: Number(task.count || 1) }));
